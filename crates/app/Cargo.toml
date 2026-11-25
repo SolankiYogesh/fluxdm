@@ -1,0 +1,25 @@
+[package]
+name = "fluxdm-app"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fluxdm"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.105"
+arboard = { version = "3.7.0", default-features = false }
+chrono = "0.4.45"
+eframe = "0.37.0"
+egui_extras = "0.37.0"
+fluxdm-core = { version = "0.1.0", path = "../core" }
+open = "5.4.5"
+rfd = "0.18.0"
+serde_json = "1.0.154"
+tokio = "1.54.1"
+url = "2.5.9"
+
+[build-dependencies]
+winresource = "0.1.34"

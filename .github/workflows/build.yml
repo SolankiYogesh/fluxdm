@@ -1,0 +1,168 @@
+name: Build
+
+on:
+  push:
+    branches: [main, master]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
+
+env:
+  CARGO_TERM_COLOR: always
+  # Lets the TLS library build on Windows without installing an assembler.
+  AWS_LC_SYS_PREBUILT_NASM: "1"
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal --component clippy
+          rustup default stable
+      - uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: test-${{ matrix.os }}-${{ hashFiles('Cargo.lock') }}
+      - name: Lint
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Rust tests
+        run: cargo test --workspace --locked
+      - name: Extension tests
+        run: node --test extension/tests/rules.test.mjs
+
+  macos:
+    name: Package (macOS universal)
+    needs: test
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add aarch64-apple-darwin x86_64-apple-darwin
+      - run: sh scripts/package-macos.sh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: macos-universal
+          path: dist/*.dmg
+          if-no-files-found: error
+
+  linux:
+    name: Package (Linux ${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # An older release keeps the required C library version low.
+          - { arch: x64, os: ubuntu-22.04 }
+          - { arch: arm64, os: ubuntu-22.04-arm }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Linux libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbcommon-dev libxkbcommon-x11-dev libwayland-dev libx11-dev libxcb1-dev libxcb-render0-dev libxcb-shape0-dev libxcb-xfixes0-dev libgl1-mesa-dev
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - run: sh scripts/package-linux.sh
+      - name: Check that the package installs
+        run: |
+          sudo apt-get install -y ./dist/*.deb
+          fluxdm-host uninstall
+      - uses: actions/upload-artifact@v7
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            dist/*.deb
+            dist/*.tar.gz
+          if-no-files-found: error
+
+  windows:
+    name: Package (Windows ${{ matrix.arch }})
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { arch: x64, os: windows-latest, target: x86_64-pc-windows-msvc }
+          - { arch: arm64, os: windows-11-arm, target: aarch64-pc-windows-msvc }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Install Rust
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+          rustup target add ${{ matrix.target }}
+      - run: ./scripts/package-windows.ps1 -Target ${{ matrix.target }} -Arch ${{ matrix.arch }}
+        shell: pwsh
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-${{ matrix.arch }}
+          path: dist/*.zip
+          if-no-files-found: error
+
+  extension:
+    name: Package (browser extension)
+    needs: test
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v7
+      - run: |
+          sh scripts/package-extension.sh target/package/FluxDM-extension
+          mkdir -p dist
+          (cd target/package && zip -qr ../../dist/FluxDM-extension.zip FluxDM-extension)
+      - uses: actions/upload-artifact@v7
+        with:
+          name: extension
+          path: dist/*.zip
+          if-no-files-found: error
+
+  release:
+    name: Draft release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, linux, windows, extension]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create checksums and a draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd dist
+          sha256sum -- * > SHA256SUMS.txt
+          gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "FluxDM $TAG" --generate-notes -- *

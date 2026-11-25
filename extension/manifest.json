@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "FluxDM Integration",
+  "description": "Send downloads, links and media to the FluxDM download manager.",
+  "version": "0.3.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAv7VsO1AxOOeCpn7eLl1cnPrcVaOQUfQseuNkoeUqVrjn7+B3jKP/y8lPO570lQsPsxgCcAhg/C13D8H9AC6mN4QlsyAbIVoC1MGFIG6cpUEmZ3y0aonp8NS4j5EnNkOskU9iNOQY0S7t2jDKiJwVwcaEavQyAsLthtSd5CcyOubNXlXHqYFdR5zXyosBlw6hTdJ79pqi4VEbXUB7bm7jIld/y1XHVg5B7VuxcvznKXjIrroR4JnVbmMkhOaap9/hKwVNGj2vI9vxco+VfrHC/sBFAKO5gVOrCi69WDAlR7GzEVPzTnVJOpXuNoe2peovUqr9Fr2vNQLYck66IkZzwwIDAQAB",
+  "minimum_chrome_version": "116",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": { "default_popup": "popup.html", "default_icon": { "16": "icons/16.png", "48": "icons/48.png" } },
+  "background": { "service_worker": "background.js", "type": "module" },
+  "content_scripts": [
+    { "matches": ["http://*/*", "https://*/*"], "js": ["content.js"], "all_frames": true, "run_at": "document_idle" }
+  ],
+  "permissions": ["downloads", "cookies", "contextMenus", "nativeMessaging", "storage", "webRequest", "scripting"],
+  "host_permissions": ["<all_urls>"]
+}

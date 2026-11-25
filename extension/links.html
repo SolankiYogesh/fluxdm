@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>FluxDM — choose links</title>
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { display: flex; flex-direction: column; height: 100vh; }
+  header, footer { padding: 12px 14px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  #types { display: flex; gap: 6px; flex-wrap: wrap; }
+  /* The active type filter is the disabled one. */
+  #types button:disabled { opacity: 1; background: var(--primary); color: var(--primary-foreground); }
+  #search { flex: 1; min-width: 180px; }
+  main { flex: 1; overflow: auto; background: var(--card); border-block: 1px solid var(--border); }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  td, th { padding: 8px 10px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-bottom: 1px solid var(--border); }
+  td:last-child { color: var(--muted-foreground); }
+  th { position: sticky; top: 0; background: var(--card); color: var(--muted-foreground); font-weight: 500; font-size: 12px; }
+  tbody tr:hover { background: var(--muted); }
+  .pick { width: 42px; }
+  .type { width: 110px; }
+  .text { width: 24%; }
+  #status { color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+  <header>
+    <span id="types"></span>
+    <input id="search" type="search" placeholder="Filter by name or address, e.g. .mp3 episode">
+    <button id="all" type="button">Select all</button>
+    <button id="none" type="button">Select none</button>
+  </header>
+  <main>
+    <table>
+      <thead><tr><th class="pick"></th><th class="type">Type</th><th class="text">Link text</th><th>Address</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+  </main>
+  <footer>
+    <button id="go" class="primary" type="button" disabled>Download</button>
+    <span id="status"></span>
+  </footer>
+  <script type="module" src="links.js"></script>
+</body>
+</html>

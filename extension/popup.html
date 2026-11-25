@@ -1,0 +1,45 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="theme.css">
+<style>
+  body { width: 360px; padding: 14px; }
+  .brand { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+  .brand img { width: 34px; height: 34px; }
+  h1 { font-size: 15px; font-weight: 600; margin: 0; }
+  #status { margin: 0; color: var(--muted-foreground); font-size: 12px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 4px 12px; margin-bottom: 10px; }
+  label { display: flex; gap: 9px; align-items: center; margin: 9px 0; cursor: pointer; }
+  label.stack { flex-direction: column; align-items: stretch; gap: 5px; cursor: auto; }
+  textarea { width: 100%; font: 12px ui-monospace, monospace; resize: vertical; }
+  input[type=number] { width: 80px; }
+  #allLinks { width: 100%; }
+  #media button { display: block; width: 100%; text-align: left; margin-top: 6px; line-height: 1.4; overflow-wrap: anywhere; }
+  details { margin-top: 12px; }
+  summary { cursor: pointer; color: var(--muted-foreground); }
+  details p { color: var(--muted-foreground); font-size: 12px; }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <img src="icons/48.png" alt="">
+    <div><h1>FluxDM</h1><p id="status" role="status">Checking…</p></div>
+  </div>
+  <div class="card">
+  <label><input type="checkbox" id="enabled"> Take over browser downloads</label>
+  <label><input type="checkbox" id="videoButton"> Show the button on pages with media</label>
+  </div>
+  <button id="allLinks" class="primary" type="button">Download all links on this page…</button>
+  <div id="media"></div>
+  <details>
+    <summary>Capture settings</summary>
+    <label><input type="checkbox" id="captureAll"> Capture every download, whatever its type</label>
+    <label class="stack">File types<textarea id="extensions" rows="5"></textarea></label>
+    <label class="stack">Never capture from these sites<textarea id="excludedSites" rows="2" placeholder="example.com"></textarea></label>
+    <label>Ignore files smaller than <input type="number" id="minSizeKB" min="0"> KB</label>
+    <p>Hold Alt while clicking a link to let the browser download it.</p>
+  </details>
+  <script type="module" src="popup.js"></script>
+</body>
+</html>

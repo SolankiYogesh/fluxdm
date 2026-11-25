@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=FluxDM
+Comment=Segmented download manager
+Exec=fluxdm
+Icon=fluxdm
+Terminal=false
+Categories=Network;FileTransfer;
+StartupWMClass=fluxdm
