@@ -164,6 +164,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          # The notes list the commits since the previous tag.
+          fetch-depth: 0
       - uses: actions/download-artifact@v8
         with:
           path: dist
@@ -172,9 +176,10 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-          REPO: ${{ github.repository }}
         run: |
+          # checkout leaves a lightweight copy of the pushed tag; fetch the real one.
+          git fetch --force origin "refs/tags/$TAG:refs/tags/$TAG"
+          sh scripts/release-notes.sh "$TAG" > "$RUNNER_TEMP/notes.md"
           cd dist
           sha256sum -- * > SHA256SUMS.txt
-          notes="The apps are not code signed or notarised, so macOS and Windows warn on first launch. See the README for setup and for which platforms have been tested by hand."
-          gh release create "$TAG" --repo "$REPO" --verify-tag --title "FluxDM $TAG" --notes "$notes" --generate-notes -- *
+          gh release create "$TAG" --verify-tag --title "FluxDM $TAG" --notes-file "$RUNNER_TEMP/notes.md" -- *
