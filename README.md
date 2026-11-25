@@ -258,8 +258,10 @@ assets/        app icon
 1. Set `version` in `Cargo.toml`, run `cargo build`, and commit both
    `Cargo.toml` and `Cargo.lock`.
 2. Push a matching tag, for example `v0.1.0`.
-3. If every build succeeds, the workflow creates a **draft** release with
-   `SHA256SUMS.txt`. Review and publish it.
+3. If every build succeeds, the workflow publishes a release with all packages
+   and `SHA256SUMS.txt`. Releases are created only for version tags; other pushes
+   and pull requests just build and test. The workflow stops if the tag and the
+   version differ.
 
 To package locally, use `scripts/package-macos.sh` (needs both Apple Rust
 targets), `scripts/package-linux.sh` or `scripts/package-windows.ps1`. To

@@ -29,6 +29,17 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
+      - name: Check that the tag matches the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          version=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::tag $TAG does not match version $version in Cargo.toml"
+            exit 1
+          fi
       - name: Install Linux libraries
         if: runner.os == 'Linux'
         run: |
@@ -146,7 +157,7 @@ jobs:
           if-no-files-found: error
 
   release:
-    name: Draft release
+    name: Publish release
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [macos, linux, windows, extension]
     runs-on: ubuntu-22.04
@@ -157,7 +168,7 @@ jobs:
         with:
           path: dist
           merge-multiple: true
-      - name: Create checksums and a draft release
+      - name: Create checksums and publish the release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -165,4 +176,5 @@ jobs:
         run: |
           cd dist
           sha256sum -- * > SHA256SUMS.txt
-          gh release create "$TAG" --repo "$REPO" --draft --verify-tag --title "FluxDM $TAG" --generate-notes -- *
+          notes="The apps are not code signed or notarised, so macOS and Windows warn on first launch. See the README for setup and for which platforms have been tested by hand."
+          gh release create "$TAG" --repo "$REPO" --verify-tag --title "FluxDM $TAG" --notes "$notes" --generate-notes -- *
