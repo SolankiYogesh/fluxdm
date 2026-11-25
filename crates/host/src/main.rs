@@ -18,7 +18,7 @@ const HELP: &str = "fluxdm-host
   add URL...                    send addresses to the running app
   get URL [options]             download without the app
       -o FOLDER                 destination (default: current folder)
-      -n NUMBER                 connections, 1-32 (default 8)
+      -n NUMBER                 connections, 1-32 (default 16)
       -l KBPS                   speed limit in KiB/s
       -c TYPE:HEX               verify sha256, sha1 or md5";
 
