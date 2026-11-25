@@ -516,3 +516,24 @@ async fn links_ticked_in_the_picker_are_not_confirmed_twice() {
     assert_eq!(m.pending().unwrap().1, 1, "the unconfirmed one waits");
     assert_eq!(m.list().len(), 1, "the confirmed one was added");
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn previews_name_size_and_folder_that_the_download_then_uses() {
+    use fluxdm_core::preview;
+    let server = start(300_000, Behaviour::default()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let m = manager(dir.path(), |s| s.category_folders = true);
+    let url = format!("{}/pack.zip", server.base);
+    let info = preview::inspect(&m.settings(), &req(url.clone())).await.unwrap();
+    assert_eq!((info.size, info.resumable, info.is_web_page), (Some(300_000), Some(true), false));
+    assert!(m.list().is_empty(), "looking must not add a download");
+    let folder = preview::folder_for(&m.settings(), &info.name);
+
+    let id = m.add(req(url), true).unwrap();
+    let task = finished(&m, id).await;
+    assert_eq!((task.file_name.as_str(), task.dir.as_deref()), (info.name.as_str(), Some(folder.as_path())));
+    assert_eq!(preview::free_name(&folder, &info.name), "pack (1).zip");
+
+    let gone = preview::inspect(&m.settings(), &req("http://127.0.0.1:9/x.zip".into())).await;
+    assert!(gone.is_err());
+}

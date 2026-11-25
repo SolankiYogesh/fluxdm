@@ -91,6 +91,14 @@ async fn downloads_over_ftp_and_resumes_after_a_broken_transfer() {
     })
     .unwrap();
     let url = format!("ftp://127.0.0.1:{port}/pub/a.bin");
+    let info = fluxdm_core::preview::inspect(
+        &Settings::default(),
+        &DownloadRequest { url: format!("ftp://127.0.0.1:{port}/file.bin"), ..Default::default() },
+    )
+    .await
+    .unwrap();
+    assert_eq!((info.name.as_str(), info.size), ("file.bin", Some(900_000)));
+    assert!(offsets.lock().unwrap().is_empty(), "previewing must not transfer the file");
     let id = m.add(DownloadRequest { url, ..Default::default() }, true).unwrap();
     let t = wait(&m, id).await;
     assert_eq!(t.status, Status::Completed, "{:?}", t.error);

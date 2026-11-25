@@ -9,6 +9,7 @@ pub mod limiter;
 pub mod links;
 pub mod manager;
 pub mod naming;
+pub mod preview;
 pub mod segments;
 pub mod types;
 

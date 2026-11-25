@@ -1,9 +1,10 @@
 //! Add, confirm, options and delete dialogs.
 
+use crate::lookup::Lookup;
 use crate::theme::{self, icon, Kind};
 use eframe::egui::{self, RichText};
 use fluxdm_core::types::MAX_CONNECTIONS;
-use fluxdm_core::{naming, DownloadRequest, Manager, Settings};
+use fluxdm_core::{naming, preview, DownloadRequest, Manager, Settings};
 use std::path::PathBuf;
 
 #[derive(Default)]
@@ -17,22 +18,31 @@ pub struct AddForm {
     referrer: String,
     checksum: String,
     error: String,
+    /// What was filled in from the server, so edits by the user are told apart.
+    auto_name: String,
+    auto_folder: String,
+    name_focused: bool,
+    folder_focused: bool,
+    lookup: Lookup,
 }
 
 fn optional(s: &str) -> Option<String> {
     (!s.trim().is_empty()).then(|| s.trim().to_string())
 }
 
-fn folder_row(ui: &mut egui::Ui, value: &mut String, hint: &str) {
+/// Returns true while the text box has keyboard focus.
+fn folder_row(ui: &mut egui::Ui, value: &mut String, hint: &str) -> bool {
     ui.horizontal(|ui| {
         let width = (ui.available_width() - 118.0).max(160.0);
-        ui.add(theme::input(value, hint).desired_width(width));
+        let focused = ui.add(theme::input(value, hint).desired_width(width)).has_focus();
         if theme::button(ui, Kind::Outline, icon::FOLDER, "Browse").clicked() {
             if let Some(p) = rfd::FileDialog::new().pick_folder() {
                 *value = p.display().to_string();
             }
         }
-    });
+        focused
+    })
+    .inner
 }
 
 impl AddForm {
@@ -45,12 +55,16 @@ impl AddForm {
             return Err("Enter at least one address.".into());
         }
         let single = urls.len() == 1;
+        // Untouched suggestions are left for the engine to decide, so category
+        // sorting and the server's final name still apply.
+        let name = optional(&self.name).filter(|_| single && self.name != self.auto_name);
+        let folder = optional(&self.folder).filter(|_| self.folder != self.auto_folder);
         Ok(urls
             .into_iter()
             .map(|url| DownloadRequest {
                 url,
-                filename: optional(&self.name).filter(|_| single),
-                dir: optional(&self.folder).map(PathBuf::from),
+                filename: name.clone(),
+                dir: folder.clone().map(PathBuf::from),
                 connections: (self.connections > 0).then_some(self.connections),
                 username: optional(&self.username),
                 password: (!self.password.is_empty()).then(|| self.password.clone()),
@@ -61,8 +75,59 @@ impl AddForm {
             .collect())
     }
 
+    /// Every address typed so far, with batch patterns expanded.
+    fn addresses(&self) -> Vec<String> {
+        let lines = self.urls.lines().map(str::trim).filter(|l| !l.is_empty());
+        lines.flat_map(|l| naming::expand_batch(l).unwrap_or_default()).collect()
+    }
+
+    /// Look up the single address and fill in the name and folder. Returns the
+    /// name and folder to show.
+    fn suggest(
+        &mut self,
+        ctx: &egui::Context,
+        manager: &Manager,
+        runtime: &tokio::runtime::Handle,
+        address: Option<&str>,
+    ) -> Option<(String, PathBuf)> {
+        let request = address.map(|url| DownloadRequest {
+            url: url.to_string(),
+            referrer: optional(&self.referrer),
+            username: optional(&self.username),
+            password: (!self.password.is_empty()).then(|| self.password.clone()),
+            ..Default::default()
+        });
+        self.lookup.update(ctx, manager, runtime, request);
+
+        let guessed = address
+            .filter(|a| preview::is_fetchable(a))
+            .map(|a| self.lookup.info().map_or_else(|| naming::guess_name(None, None, a), |i| i.name.clone()));
+        // A guess from the address alone is not written into the field.
+        let fetched = self.lookup.info().map(|i| i.name.clone()).unwrap_or_default();
+        if !self.name_focused && (self.name.is_empty() || self.name == self.auto_name) {
+            self.name = fetched.clone();
+            self.auto_name = fetched;
+        }
+        let guessed = guessed?;
+        let name = naming::sanitize(&self.name).unwrap_or(guessed);
+        let automatic = preview::folder_for(&manager.settings(), &name);
+        if !self.folder_focused && (self.folder.is_empty() || self.folder == self.auto_folder) {
+            self.folder = automatic.display().to_string();
+            self.auto_folder = self.folder.clone();
+        }
+        let folder = optional(&self.folder).map_or(automatic, PathBuf::from);
+        Some((name, folder))
+    }
+
     /// Returns false once the window should close.
-    pub fn show(&mut self, ctx: &egui::Context, manager: &Manager) -> bool {
+    pub fn show(&mut self, ctx: &egui::Context, manager: &Manager, runtime: &tokio::runtime::Handle) -> bool {
+        let addresses = self.addresses();
+        let one = (addresses.len() == 1).then(|| addresses[0].as_str());
+        let suggestion = self.suggest(ctx, manager, runtime, one);
+        if one.is_none() && self.folder == self.auto_folder {
+            self.folder.clear();
+            self.auto_folder.clear();
+        }
         let mut close = false;
         let about = "One address per line. A pattern like file[01-20].zip adds a batch.";
         let dismissed = theme::dialog(ctx, "add", "Add download", about, 520.0, |ui| {
@@ -73,16 +138,27 @@ impl AddForm {
                     .desired_rows(3)
                     .desired_width(f32::INFINITY),
             );
+            if let Some((name, folder)) = &suggestion {
+                self.lookup.card(ui, name, folder);
+            } else if addresses.len() > 1 {
+                ui.label(theme::muted(format!(
+                    "{} downloads. Each one's name and size are fetched when it starts.",
+                    addresses.len()
+                )));
+            }
             let line = |ui: &mut egui::Ui, label: &str, value: &mut String, hint: &str| {
                 theme::field(ui, label, |ui| ui.add(theme::input(value, hint).desired_width(f32::INFINITY)));
             };
             ui.columns(2, |c| {
-                line(&mut c[0], "File name", &mut self.name, "Automatic");
+                self.name_focused = theme::field(&mut c[0], "File name", |ui| {
+                    ui.add(theme::input(&mut self.name, "Automatic").desired_width(f32::INFINITY)).has_focus()
+                });
                 theme::field(&mut c[1], "Connections (0 = default)", |ui| {
                     ui.add(egui::Slider::new(&mut self.connections, 0..=MAX_CONNECTIONS));
                 });
             });
-            theme::field(ui, "Save to", |ui| folder_row(ui, &mut self.folder, "Category folder"));
+            self.folder_focused =
+                theme::field(ui, "Save to", |ui| folder_row(ui, &mut self.folder, "Category folder"));
             ui.collapsing("Sign-in, referrer and checksum", |ui| {
                 ui.columns(2, |c| {
                     line(&mut c[0], "User name", &mut self.username, "");
@@ -123,26 +199,26 @@ impl AddForm {
 }
 
 /// Ask before taking a download sent by the browser.
-pub fn confirm_browser(ctx: &egui::Context, manager: &Manager) {
-    let Some((req, waiting)) = manager.pending() else { return };
-    let name = naming::guess_name(req.filename.as_deref(), None, &req.url);
+pub fn confirm_browser(
+    ctx: &egui::Context,
+    manager: &Manager,
+    runtime: &tokio::runtime::Handle,
+    lookup: &mut Lookup,
+) {
+    let pending = manager.pending();
+    lookup.update(ctx, manager, runtime, pending.as_ref().map(|(r, _)| r.clone()));
+    let Some((req, waiting)) = pending else { return };
+    // The browser's suggested name wins, exactly as it does when downloading.
+    let name = lookup
+        .info()
+        .map_or_else(|| naming::guess_name(req.filename.as_deref(), None, &req.url), |i| i.name.clone());
+    let folder = req.dir.clone().unwrap_or_else(|| preview::folder_for(&manager.settings(), &name));
     let dismissed = theme::dialog(ctx, "browser", "Download from browser", "", 500.0, |ui| {
-        theme::card().fill(theme::MUTED).show(ui, |ui| {
-            ui.set_width(ui.available_width());
-            ui.horizontal(|ui| {
-                ui.label(theme::glyph(icon::for_category(naming::category(&name)), 22.0, theme::BLUE));
-                ui.vertical(|ui| {
-                    ui.add(egui::Label::new(RichText::new(&name).font(theme::semibold(14.0))).truncate());
-                    ui.add(egui::Label::new(theme::muted(&req.url)).truncate());
-                });
-            });
-        });
-        ui.horizontal(|ui| {
-            theme::badge(ui, naming::category(&name), theme::BLUE);
-            if waiting > 1 {
-                ui.label(theme::muted(format!("{} more waiting", waiting - 1)));
-            }
-        });
+        ui.add(egui::Label::new(theme::muted(&req.url)).truncate()).on_hover_text(&req.url);
+        lookup.card(ui, &name, &folder);
+        if waiting > 1 {
+            ui.label(theme::muted(format!("{} more waiting", waiting - 1)));
+        }
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             let now = theme::button(ui, Kind::Primary, icon::DOWNLOAD, "Start download").clicked();

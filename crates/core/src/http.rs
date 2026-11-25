@@ -225,19 +225,22 @@ async fn probe(client: &Client, ctx: &JobContext, task: &Shared) -> Result<Sourc
     Ok(Source { url, first: Some(resp), is_playlist })
 }
 
-fn destination(settings: &Settings, task: &Task) -> std::path::PathBuf {
-    if let Some(d) = &task.req.dir {
-        d.clone()
-    } else if settings.category_folders && task.category != "General" {
-        settings.download_dir.join(&task.category)
-    } else {
-        settings.download_dir.clone()
+/// Where a download of this category is saved, unless a folder was chosen.
+pub(crate) fn folder(
+    settings: &Settings,
+    chosen: Option<&std::path::Path>,
+    category: &str,
+) -> std::path::PathBuf {
+    match chosen {
+        Some(d) => d.to_path_buf(),
+        None if settings.category_folders && category != "General" => settings.download_dir.join(category),
+        None => settings.download_dir.clone(),
     }
 }
 
 pub fn ensure_destination(settings: &Settings, task: &mut Task) -> Result<()> {
     if task.dir.is_none() {
-        task.dir = Some(destination(settings, task));
+        task.dir = Some(folder(settings, task.req.dir.as_deref(), &task.category));
     }
     let dir = task.dir.as_ref().expect("just set");
     std::fs::create_dir_all(dir).with_context(|| format!("create folder {}", dir.display()))

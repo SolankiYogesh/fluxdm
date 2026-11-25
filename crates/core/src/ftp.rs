@@ -2,6 +2,7 @@
 
 use crate::http::{backoff, ensure_destination, fatal, Fatal, JobContext, Shared};
 use crate::segments::SegmentMap;
+use crate::types::DownloadRequest;
 use anyhow::{anyhow, Context, Result};
 use percent_encoding::percent_decode_str;
 use std::fs::OpenOptions;
@@ -36,8 +37,8 @@ async fn within<T, E: std::fmt::Display>(
         .map_err(|e| anyhow!("FTP {what}: {e}"))
 }
 
-async fn attempt(ctx: &JobContext, task: &Shared) -> Result<()> {
-    let req = task.lock().unwrap().req.clone();
+/// Connect, sign in and return the connection with the file's path.
+async fn open(req: &DownloadRequest) -> Result<(AsyncFtpStream, String)> {
     let url = url::Url::parse(&req.url)?;
     let host = url.host_str().ok_or_else(|| fatal("FTP address has no host"))?.to_string();
     let host = host.trim_matches(['[', ']']).to_string();
@@ -59,6 +60,20 @@ async fn attempt(ctx: &JobContext, task: &Shared) -> Result<()> {
     ftp.set_passive_nat_workaround(true);
     within("login", ftp.login(user.as_str(), password.as_str())).await?;
     within("binary mode", ftp.transfer_type(FileType::Binary)).await?;
+    Ok((ftp, path))
+}
+
+/// The file's size, if the server will say.
+pub(crate) async fn size_of(req: &DownloadRequest) -> Result<Option<u64>> {
+    let (mut ftp, path) = open(req).await?;
+    let size = within("size", ftp.size(path.as_str())).await.ok().map(|n| n as u64);
+    let _ = tokio::time::timeout(Duration::from_secs(2), ftp.quit()).await;
+    Ok(size)
+}
+
+async fn attempt(ctx: &JobContext, task: &Shared) -> Result<()> {
+    let req = task.lock().unwrap().req.clone();
+    let (mut ftp, path) = open(&req).await?;
     let total = within("size", ftp.size(path.as_str())).await.ok().map(|n| n as u64);
 
     let (file, offset) = {

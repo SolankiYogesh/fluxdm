@@ -6,6 +6,7 @@ mod bulk;
 mod clipboard;
 mod dialogs;
 mod format;
+mod lookup;
 mod theme;
 mod views;
 
@@ -50,6 +51,7 @@ struct App {
     new_url: String,
     message: String,
     logo: egui::TextureHandle,
+    offer_lookup: lookup::Lookup,
 }
 
 impl eframe::App for App {
@@ -64,7 +66,7 @@ impl eframe::App for App {
 
         self.layout(ui, &views);
 
-        if self.add.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager)) {
+        if self.add.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager, &self.runtime)) {
             self.add = None;
         }
         if self.bulk.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager, &self.runtime)) {
@@ -77,7 +79,7 @@ impl eframe::App for App {
             self.delete = None;
         }
         if self.add.is_none() && self.bulk.is_none() && self.options.is_none() && self.delete.is_none() {
-            dialogs::confirm_browser(&ctx, &self.manager);
+            dialogs::confirm_browser(&ctx, &self.manager, &self.runtime, &mut self.offer_lookup);
         }
     }
 
@@ -135,6 +137,7 @@ fn main() -> anyhow::Result<()> {
             );
             Ok(Box::new(App {
                 logo,
+                offer_lookup: Default::default(),
                 manager,
                 filter: Filter::All,
                 search: String::new(),

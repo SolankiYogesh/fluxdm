@@ -39,6 +39,13 @@ No accounts, trials, licence keys, adverts or telemetry.
 - **HLS video:** picks the best quality, handles standard AES-128, and merges
   separate audio when `ffmpeg` is installed. DRM is not supported.
 
+### Know before you download
+
+Paste a link and FluxDM looks up the **file name, size and destination folder**,
+and shows whether the download can be resumed. The same details appear when a
+download arrives from your browser or clipboard. You can change the name and
+folder before starting.
+
 ### Bulk and automatic capture
 
 - Grab the links on a web page, find them in pasted text, or import a file.
@@ -163,8 +170,8 @@ accept a download, the browser keeps it.
 
 ## Usage
 
-- **Add URL:** one or more addresses, with optional folder, connections, sign-in
-  and checksum.
+- **Add URL:** paste an address to see its name, size and folder. You can also
+  add several at once, and set connections, sign-in and a checksum.
 - **Bulk / Grab:** collect many links and choose which to download.
 - **Double-click** a download to open it when complete, or to pause or resume it.
 - **Cmd/Ctrl + click** to select several downloads.
@@ -283,6 +290,8 @@ regenerate icons from `assets/icon.svg`, see `scripts/make-icons.mjs`.
 ## Privacy and security
 
 - FluxDM has no analytics or telemetry.
+- To show file details, FluxDM contacts the server as soon as you paste an
+  address, before you press Start. A link that works only once may be used up.
 - Cookies and passwords needed by unfinished downloads are stored
   **unencrypted** in local files. On macOS and Linux only your user account can
   read them; Windows relies on your profile folder's permissions. They are removed
