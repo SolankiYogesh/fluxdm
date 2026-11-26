@@ -1,6 +1,7 @@
 //! Add, confirm, options and delete dialogs.
 
 use crate::lookup::Lookup;
+use crate::notify::Center;
 use crate::theme::{self, icon, Kind};
 use eframe::egui::{self, RichText};
 use fluxdm_core::types::MAX_CONNECTIONS;
@@ -270,7 +271,7 @@ impl Options {
         }
     }
 
-    pub fn show(&mut self, ctx: &egui::Context, manager: &Manager) -> bool {
+    pub fn show(&mut self, ctx: &egui::Context, manager: &Manager, notices: &std::sync::Arc<Center>) -> bool {
         let mut close = false;
         let dismissed = theme::dialog(ctx, "options", "Settings", "Applies to new and queued downloads.", 560.0, |ui| {
             let s = &mut self.draft;
@@ -302,6 +303,24 @@ impl Options {
             theme::switch(ui, &mut s.category_folders, "Sort into category folders");
             theme::switch(ui, &mut s.watch_clipboard, "Offer to download file links I copy");
             theme::switch(ui, &mut s.confirm_browser, "Ask before browser downloads");
+            ui.separator();
+            ui.label(RichText::new("Notifications").font(theme::semibold(14.0)));
+            theme::switch(ui, &mut s.notify_complete, "Notify me when downloads finish");
+            theme::switch(ui, &mut s.notify_failed, "Notify me when downloads fail");
+            ui.add_enabled_ui(s.notify_complete || s.notify_failed, |ui| {
+                theme::switch(ui, &mut s.notify_sound, "Play a sound");
+            });
+            if theme::button(ui, Kind::Outline, icon::ACTIVITY, "Send test notification").clicked() {
+                notices.test(s.notify_sound, ui.ctx().clone());
+            }
+            if let Some(problem) = notices.problem() {
+                ui.add(
+                    egui::Label::new(
+                        RichText::new(format!("System notification not shown: {problem}")).color(theme::AMBER),
+                    )
+                    .wrap(),
+                );
+            }
             ui.separator();
             ui.label(RichText::new("Scheduler").font(theme::semibold(14.0)));
             theme::switch(ui, &mut s.schedule.enabled, "Run the queue only during these hours");

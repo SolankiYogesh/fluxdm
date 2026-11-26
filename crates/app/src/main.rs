@@ -7,6 +7,7 @@ mod clipboard;
 mod dialogs;
 mod format;
 mod lookup;
+mod notify;
 mod theme;
 mod views;
 
@@ -52,6 +53,7 @@ struct App {
     message: String,
     logo: egui::TextureHandle,
     offer_lookup: lookup::Lookup,
+    notices: Arc<notify::Center>,
 }
 
 impl eframe::App for App {
@@ -72,7 +74,7 @@ impl eframe::App for App {
         if self.bulk.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager, &self.runtime)) {
             self.bulk = None;
         }
-        if self.options.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager)) {
+        if self.options.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager, &self.notices)) {
             self.options = None;
         }
         if self.delete.as_mut().is_some_and(|f| !f.show(&ctx, &self.manager)) {
@@ -80,6 +82,15 @@ impl eframe::App for App {
         }
         if self.add.is_none() && self.bulk.is_none() && self.options.is_none() && self.delete.is_none() {
             dialogs::confirm_browser(&ctx, &self.manager, &self.runtime, &mut self.offer_lookup);
+        }
+        // Cards wait until no dialog is open, so they never cover its buttons.
+        let dialog_open = self.add.is_some()
+            || self.bulk.is_some()
+            || self.options.is_some()
+            || self.delete.is_some()
+            || self.manager.pending().is_some();
+        if !dialog_open {
+            self.notices.show_cards(&ctx);
         }
     }
 
@@ -129,6 +140,8 @@ fn main() -> anyhow::Result<()> {
             });
             handle.block_on(ipc::serve(manager.clone(), notify.clone()))?;
             clipboard::watch(manager.clone(), notify);
+            let notices = Arc::new(notify::Center::default());
+            notices.watch(manager.clone(), cc.egui_ctx.clone());
             let icon = eframe::icon_data::from_png_bytes(include_bytes!("../assets/icon.png"))?;
             let logo = cc.egui_ctx.load_texture(
                 "logo",
@@ -138,6 +151,7 @@ fn main() -> anyhow::Result<()> {
             Ok(Box::new(App {
                 logo,
                 offer_lookup: Default::default(),
+                notices,
                 manager,
                 filter: Filter::All,
                 search: String::new(),

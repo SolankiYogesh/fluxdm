@@ -185,6 +185,10 @@ pub struct Settings {
     pub confirm_browser: bool,
     /// Offer to download a file address copied to the clipboard.
     pub watch_clipboard: bool,
+    /// System notifications when downloads finish or fail.
+    pub notify_complete: bool,
+    pub notify_failed: bool,
+    pub notify_sound: bool,
 }
 
 impl Default for Settings {
@@ -206,6 +210,9 @@ impl Default for Settings {
             schedule: Schedule::default(),
             confirm_browser: true,
             watch_clipboard: true,
+            notify_complete: true,
+            notify_failed: true,
+            notify_sound: true,
         }
     }
 }

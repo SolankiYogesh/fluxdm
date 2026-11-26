@@ -1,5 +1,6 @@
 //! Owns the download list: persistence, queue, concurrency and the scheduler.
 
+use crate::events::Event;
 use crate::http::{JobContext, Shared};
 use crate::limiter::Limiter;
 use crate::segments::SegmentMap;
@@ -54,7 +55,12 @@ struct State {
     next_id: u64,
     /// Downloads sent by the browser that await confirmation.
     pending: VecDeque<DownloadRequest>,
+    /// Finished downloads nobody has collected yet.
+    events: VecDeque<Event>,
 }
+
+/// Bounds the list when nothing collects events, as in the command line tool.
+const MAX_EVENTS: usize = 1000;
 
 /// A read-only copy of a task for display.
 pub struct TaskView {
@@ -233,7 +239,7 @@ impl Manager {
         let next_id = tasks.keys().next_back().map_or(1, |id| id + 1);
         Ok(Arc::new(Self {
             global_limit: Arc::new(Limiter::new(settings.speed_limit)),
-            state: Mutex::new(State { tasks, settings, next_id, pending: VecDeque::new() }),
+            state: Mutex::new(State { tasks, settings, next_id, pending: VecDeque::new(), events: VecDeque::new() }),
             store: Arc::new(Store { dir: data_dir, lock: Mutex::new(()) }),
             runtime,
         }))
@@ -304,6 +310,11 @@ impl Manager {
 
     pub fn take_pending(&self) -> Option<DownloadRequest> {
         self.state.lock().unwrap().pending.pop_front()
+    }
+
+    /// Downloads that completed or failed since the last call, each once.
+    pub fn take_events(&self) -> Vec<Event> {
+        self.state.lock().unwrap().events.drain(..).collect()
     }
 
     pub fn list(&self) -> Vec<TaskView> {
@@ -488,10 +499,11 @@ impl Manager {
         let settings = s.settings.clone();
         let open = settings.schedule.allows(weekday, minute);
         let mut running = 0;
+        let mut finished = Vec::new();
         for e in s.tasks.values_mut() {
-            let (bytes, force, status) = {
+            let (bytes, force) = {
                 let t = e.task.lock().unwrap();
-                (t.downloaded(), t.force, t.status)
+                (t.downloaded(), t.force)
             };
             let elapsed = e.last_sample.0.elapsed().as_secs_f64();
             if elapsed >= 0.5 {
@@ -501,12 +513,24 @@ impl Manager {
             }
             if e.job.as_ref().is_some_and(JoinHandle::is_finished) {
                 e.job = None;
+                // Read the status only now that the job has ended; an earlier
+                // copy could predate its result.
+                let mut t = e.task.lock().unwrap();
                 // A job that panicked never recorded a result.
-                if status == Status::Downloading {
-                    let mut t = e.task.lock().unwrap();
+                if t.status == Status::Downloading {
                     t.status = Status::Failed;
                     t.error = Some("the download stopped unexpectedly".into());
                     self.store.save_task(&t);
+                }
+                if matches!(t.status, Status::Completed | Status::Failed) {
+                    let failed = t.status == Status::Failed;
+                    finished.push(Event {
+                        id: t.id,
+                        name: t.file_name.clone(),
+                        path: t.final_path().filter(|_| !failed),
+                        dir: t.dir.clone(),
+                        error: failed.then(|| t.error.clone().unwrap_or_else(|| "unknown error".into())),
+                    });
                 }
             }
             if e.busy() {
@@ -518,6 +542,12 @@ impl Manager {
             } else {
                 e.speed = 0.0;
             }
+        }
+        for event in finished {
+            if s.events.len() >= MAX_EVENTS {
+                s.events.pop_front();
+            }
+            s.events.push_back(event);
         }
         for e in s.tasks.values_mut() {
             if running >= settings.max_active {

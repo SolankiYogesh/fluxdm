@@ -54,6 +54,19 @@ folder before starting.
 - Copy a file address and FluxDM offers to download it.
 - Take over browser downloads, or pick links from the current page.
 
+### Notifications
+
+- A system notification when downloads **finish or fail**, however they were
+  added: by hand, in bulk, from the browser or clipboard, or by the scheduler.
+- Downloads finishing close together share one notification.
+- In-app cards with **Open file** and **Show folder** buttons.
+- Switch each kind, and the sound, on or off in Settings, and send a test.
+
+FluxDM must be running. The command line downloader prints its result and does
+not send notifications. On macOS, allow notifications when asked (or later under
+**System Settings → Notifications**); this needs the app bundle, such as the one
+the install script creates.
+
 ### Organisation
 
 - Automatic categories: Video, Music, Documents, Compressed, Programs, General.

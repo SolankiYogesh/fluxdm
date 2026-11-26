@@ -537,3 +537,42 @@ async fn previews_name_size_and_folder_that_the_download_then_uses() {
     let gone = preview::inspect(&m.settings(), &req("http://127.0.0.1:9/x.zip".into())).await;
     assert!(gone.is_err());
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn reports_each_finished_or_failed_download_exactly_once() {
+    let server = start(200_000, Behaviour::default()).await;
+    let dir = tempfile::tempdir().unwrap();
+    let m = manager(dir.path(), |s| {
+        s.max_active = 8;
+        s.max_retries = 0;
+    });
+    let good: Vec<u64> = (0..12)
+        .map(|i| m.add(req(format!("{}/f{i}.zip", server.base)), true).unwrap())
+        .collect();
+    let bad = m.add(req("http://127.0.0.1:9/nothing.zip".into()), true).unwrap();
+    let waiting = m.add(req(format!("{}/later.zip", server.base)), false).unwrap();
+    let mut events = Vec::new();
+    for id in good.iter().chain([&bad]) {
+        for _ in 0..1500 {
+            m.tick_at(0, 0);
+            events.extend(m.take_events());
+            if events.iter().any(|e: &fluxdm_core::Event| e.id == *id) {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    }
+    for _ in 0..20 {
+        m.tick_at(0, 0);
+        events.extend(m.take_events());
+    }
+    let mut ids: Vec<u64> = events.iter().map(|e| e.id).collect();
+    ids.sort_unstable();
+    let mut expected = good.clone();
+    expected.push(bad);
+    assert_eq!(ids, expected, "one event each, none for the paused download {waiting}");
+    for e in &events {
+        assert_eq!(e.failed(), e.id == bad, "{e:?}");
+        assert_eq!(e.path.as_ref().is_some_and(|p| p.exists()), e.id != bad);
+    }
+}
