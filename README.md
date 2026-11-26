@@ -99,16 +99,17 @@ the install script creates.
 ### Packaged builds
 
 The [build workflow](https://github.com/SolankiYogesh/fluxdm/actions/workflows/build.yml)
-is set up to produce these packages. Open a successful run and download them from
-**Artifacts** (GitHub sign-in required). Published versions will appear under
-[Releases](https://github.com/SolankiYogesh/fluxdm/releases).
+produces these packages. Download published versions from
+[Releases](https://github.com/SolankiYogesh/fluxdm/releases/latest). Builds of
+other commits are under a successful run's **Artifacts** (GitHub sign-in
+required).
 
 | Platform | Package | Tested so far |
 |---|---|---|
 | macOS, Apple silicon and Intel | universal `.dmg` | Developed and tested on Apple silicon; Intel not run |
-| Windows x64 | portable `.zip` | Cross-compiled; not yet run on Windows |
-| Windows ARM64 | portable `.zip` | Not yet run |
-| Linux x64 and ARM64 | `.deb`, `.tar.gz` | Not yet run |
+| Windows x64 | portable `.zip` | Built and engine-tested in CI; app not yet tried by hand |
+| Windows ARM64 | portable `.zip` | Built in CI; not yet run |
+| Linux x64 and ARM64 | `.deb`, `.tar.gz` | Built in CI, with a `.deb` install check; engine tests run on x64; app not yet tried by hand |
 | Chromium browsers | extension `.zip` | Tested in Chromium |
 
 The macOS, Windows and Linux archive packages include setup help. The apps are not
